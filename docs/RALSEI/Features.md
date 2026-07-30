@@ -510,6 +510,21 @@ Supported Type Combinations -
 
 Usage -
 ```rust
+let multiplicand: Int<16> = Int::<16>::from_i32(400);
+let multiplier: Int<16> = Int::<16>::from_i32(-25);
+let product = multiplicand * multiplier;
+let out: Int<32> = Int::<32>::new(); // width of product is A + B (16 + 16 = 32)
+out.assign(product);
+
+let p: UInt<32> = UInt::<32>::from_u32(1234);
+let q: UInt<8> = UInt::<8>::from_u8(12);
+let r: UInt<40> = UInt::<40>::new();
+r.assign(p * q); // ERROR: types and widths must match exactly for multiplication operands
+
+let m: UInt<8> = UInt::<8>::from_u8(5);
+let n: UInt<8> = UInt::<8>::from_u8(10);
+let o: UInt<8> = UInt::<8>::new();
+o.assign(m * n); // ERROR: width mismatch, product yields UInt<16>, cannot assign to UInt<8>
 
 ```
 ##### DIV (`/`) -
@@ -522,6 +537,21 @@ Supported Type Combinations -
 
 Usage -
 ```rust
+let dividend: UInt<32> = UInt::<32>::from_u32(5000);
+let divisor: UInt<32> = UInt::<32>::from_u32(25);
+let quotient = dividend / divisor;
+let out: UInt<32> = UInt::<32>::new(); // width of quotient matches input width W (32)
+out.assign(quotient);
+
+let p: Int<32> = Int::<32>::from_i32(500);
+let q: Int<32> = Int::<32>::from_i32(0); // division by zero case
+let r: Int<32> = Int::<32>::new();
+r.assign(p / q); // Note: returns saturated 0xFFFFFFFF (all bits high) following RISC-V standards
+
+let m: Int<16> = Int::<16>::from_i32(100);
+let n: UInt<16> = UInt::<16>::from_u32(5);
+let o: Int<16> = Int::<16>::new();
+o.assign(m / n); // ERROR: cannot perform division across mismatched numeric type domains (Int vs UInt)
 
 ```
 ##### MOD (`%`) -
@@ -534,19 +564,268 @@ Supported Type Combinations -
 
 Usage -
 ```rust
+let numerator: Int<32> = Int::<32>::from_i32(-5);
+let denominator: Int<32> = Int::<32>::from_i32(3);
+let remainder = numerator % denominator;
+let out: Int<32> = Int::<32>::new(); // width matches input width W (32)
+out.assign(remainder); // signed remainder sign follows numerator, yields -2
+
+let p: UInt<16> = UInt::<16>::from_u32(45);
+let q: UInt<16> = UInt::<16>::from_u32(0); // modulo by zero case
+let r: UInt<16> = UInt::<16>::new();
+r.assign(p % q); // Note: returns original dividend value (45) following RISC-V standards
+
+let m: UInt<32> = UInt::<32>::from_u32(10);
+let n: UInt<16> = UInt::<16>::from_u32(3);
+let o: UInt<32> = UInt::<32>::new();
+o.assign(m % n); // ERROR: width mismatch, operands must be the exact same width W
 
 ```
 #### Comparison -
 ##### Equals (`==`) -
-The **Equals** operation (`==`) is an operation that takes in two inputs, compares them, and outputs a single Bit signal indicating if it's equal (HIGH, `1`) or not equal (LOW, `0`).
+The **Equals** operation (`==`) is an operation that takes in two inputs, compares them, and outputs a single Bit (or Logic) signal indicating if it's equal (HIGH, `1`) or not equal (LOW, `0`). The two vectors must be of the same width by default, otherwise *Ralsei* will raise an error.
+It is analogous to the logic for XNOR.
+Truth Table (per cell) -
+
+| Input A | Input B | Output |
+| ------- | ------- | ------ |
+| 0       | 0       | 1      |
+| 0       | 1       | 0      |
+| 1       | 0       | 0      |
+| 1       | 1       | 1      |
+| X/Z     | 0       | X      |
+| X/Z     | 1       | X      |
+| 0       | X/Z     | X      |
+| 1       | X/Z     | X      |
+| X/Z     | X/Z     | X      |
+Supported Type Combinations -
+- `Logic` == `Logic` -> `Logic`
+- `Logic` == `Bit` -> `Logic`
+- `LogicVec<W>` == `LogicVec<W>` -> `Logic`
+- `LogicVec<W>` == `BitVec<W>` -> `Logic`
+- `Bit` == `Bit` -> `Bit`
+- `BitVec<W>` == `BitVec<W>` -> `Bit`
+- `Int<W>` == `Int<W>` -> `Bit`
+- `Int<W>` == `UInt<W>` -> `Bit`
+- `UInt<W>` == `UInt<W>` -> `Bit`
+- `Int<W>` == `LogicVec<W>` -> `Logic`
+- `UInt<W>` == `LogicVec<W>` -> `Logic`
+- `Int<W>` == `BitVec<W>` -> `Bit`
+- `UInt<W>` == `BitVec<W>` -> `Bit`
+
+Usage -
+```rust
+let a: BitVec<32> = BitVec::<32>::from_usize(0xDEADBEEF);
+let b: BitVec<32> = BitVec::<32>::from_usize(0xDEADBEEF);
+let is_equal = a == b;
+let out: Bit = Bit::new(); // comparisons always collapse to a single structural 2-state Bit
+out.assign(is_equal);
+
+let val_int: Int<16> = Int::<16>::from_i32(-4);
+let val_uint: UInt<16> = UInt::<16>::from_u32(4);
+let flag: Bit = Bit::new();
+flag.assign(val_int == val_uint); // ERROR: cannot compare across different type structures (Int vs UInt)
+
+let p: LogicVec<8> = LogicVec::<8>::new();
+let q: LogicVec<12> = LogicVec::<12>::new();
+let match_flag: Bit = Bit::new();
+match_flag.assign(p == q); // ERROR: comparison requires matching widths, cannot compare width 8 to width 12
+
+```
 ##### Not Equals (`!=`) -
+The **Not Equals** operation (`!=`) is an operation that takes in two inputs, compares them, and outputs a single Bit (or Logic) signal indicating if it's not equal (HIGH, `1`) or equal (LOW, `0`). The two vectors must be of the same width by default, otherwise *Ralsei* will raise an error.
+It is analogous to the logic for XOR.
+Truth Table (per cell) -
+
+| Input A | Input B | Output |
+| ------- | ------- | ------ |
+| 0       | 0       | 0      |
+| 0       | 1       | 1      |
+| 1       | 0       | 1      |
+| 1       | 1       | 0      |
+| X/Z     | 0       | X      |
+| X/Z     | 1       | X      |
+| 0       | X/Z     | X      |
+| 1       | X/Z     | X      |
+| X/Z     | X/Z     | X      |
+Supported Type Combinations -
+- `Logic` == `Logic` -> `Logic`
+- `Logic` == `Bit` -> `Logic`
+- `LogicVec<W>` == `LogicVec<W>` -> `Logic`
+- `LogicVec<W>` == `BitVec<W>` -> `Logic`
+- `Bit` == `Bit` -> `Bit`
+- `BitVec<W>` == `BitVec<W>` -> `Bit`
+- `Int<W>` == `Int<W>` -> `Bit`
+- `Int<W>` == `UInt<W>` -> `Bit`
+- `UInt<W>` == `UInt<W>` -> `Bit`
+- `Int<W>` == `LogicVec<W>` -> `Logic`
+- `UInt<W>` == `LogicVec<W>` -> `Logic`
+- `Int<W>` == `BitVec<W>` -> `Bit`
+- `UInt<W>` == `BitVec<W>` -> `Bit`
+
+Usage -
+```rust
+let state_a: UInt<8> = UInt::<8>::from_u8(12);
+let state_b: UInt<8> = UInt::<8>::from_u8(15);
+let is_not_equal = state_a != state_b;
+let out: Bit = Bit::new(); // inequality always collapses to a single structural 2-state Bit
+out.assign(is_not_equal);
+
+let m: BitVec<4> = BitVec::<4>::from_usize(5);
+let n: LogicVec<4> = LogicVec::<4>::from_usize(5);
+let flag: Bit = Bit::new();
+flag.assign(m != n); // Note: Allowed due to safe multi-state boundary crossing rule, reduces to 2-state Bit
+
+let x: Int<8> = Int::<8>::from_i32(-1);
+let y: Int<16> = Int::<16>::from_i32(-1);
+let err_flag: Bit = Bit::new();
+err_flag.assign(x != y); // ERROR: width mismatch, inputs must be explicitly resized to match before comparing
+
+```
 ##### Less Than (`<`) -
+The **Less Than** operation (`<`) is an operation that takes in two inputs, compares them, and outputs a single Bit signal indicating if the first operand is strictly lesser than (HIGH, `1`) the second operand or not (LOW, `0`). The two vectors must be of the same width by default, otherwise *Ralsei* will raise an error.
+
+Supported Type Combinations -
+- `Int<W>` < `Int<W>` -> `Bit`
+- `UInt<W>` < `UInt<W>` -> `Bit`
+
+Usage -
+```rust
+let val_a: Int<16> = Int::<16>::from_i32(-45);
+let val_b: Int<16> = Int::<16>::from_i32(12);
+let is_less = val_a < val_b;
+let out: Bit = Bit::new(); // collapse to a single structural Bit flag
+out.assign(is_less); // yields true (1) because -45 < 12 is signed true
+
+let p: UInt<32> = UInt::<32>::from_u32(100);
+let q: UInt<16> = UInt::<16>::from_u16(200);
+let flag: Bit = Bit::new();
+flag.assign(p < q); // ERROR: width mismatch, magnitude operands must be the exact same width
+
+let m: BitVec<8> = BitVec::<8>::from_usize(5);
+let n: BitVec<8> = BitVec::<8>::from_usize(10);
+let err_flag: Bit = Bit::new();
+err_flag.assign(m < n); // ERROR: magnitude comparisons are strictly forbidden on raw BitVec vectors
+```
 ##### Greater Than (`>`) -
+The **Greater Than** operation (`>`) is an operation that takes in two inputs, compares them, and outputs a single Bit signal indicating if the first operand is strictly greater than (HIGH, `1`) the second operand or not (LOW, `0`). The two vectors must be of the same width by default, otherwise *Ralsei* will raise an error.
+
+Supported Type Combinations -
+- `Int<W>` > `Int<W>` -> `Bit`
+- `UInt<W>` > `UInt<W>` -> `Bit`
+
+Usage -
+```rust
+let val_a: UInt<8> = UInt::<8>::from_u8(55);
+let val_b: UInt<8> = UInt::<8>::from_u8(20);
+let is_greater = val_a > val_b;
+let out: Bit = Bit::new();
+out.assign(is_greater); // yields true (1)
+
+let p: Int<32> = Int::<32>::from_i32(-10);
+let q: Int<32> = Int::<32>::from_i32(-5);
+let flag: Bit = Bit::new();
+flag.assign(p > q); // yields false (0) because -10 is not greater than -5 in signed space
+
+let m: Int<16> = Int::<16>::from_i32(5);
+let n: UInt<16> = UInt::<16>::from_u16(2);
+let err_flag: Bit = Bit::new();
+err_flag.assign(m > n); // ERROR: cannot perform magnitude operations across mismatched types (Int vs UInt)
+```
 ##### Less Than or Equal To (`<=`) -
+The **Less Than or Equal To** operation (`<=`) is an operation that takes in two inputs, compares them, and outputs a single Bit signal indicating if the first operand is lesser than or equal to (HIGH, `1`) the second operand or not (LOW, `0`). The two vectors must be of the same width by default, otherwise *Ralsei* will raise an error.
+
+Supported Type Combinations -
+- `Int<W>` <= `Int<W>` -> `Bit`
+- `UInt<W>` <= `UInt<W>` -> `Bit`
+
+Usage -
+```rust
+let val_a: Int<32> = Int::<32>::from_i32(500);
+let val_b: Int<32> = Int::<32>::from_i32(500);
+let is_less_equal = val_a <= val_b;
+let out: Bit = Bit::new();
+out.assign(is_less_equal); // yields true (1)
+
+let p: UInt<8> = UInt::<8>::from_u8(12);
+let q: UInt<8> = UInt::<8>::from_u8(10);
+let flag: Bit = Bit::new();
+flag.assign(p <= q); // yields false (0)
+```
 ##### Greater Than or Equal To (`>=`) -
+The **Greater Than or Equal To** operation (`>=`) is an operation that takes in two inputs, compares them, and outputs a single Bit signal indicating if the first operand is lesser than or equal to (HIGH, `1`) the second operand or not (LOW, `0`). The two vectors must be of the same width by default, otherwise *Ralsei* will raise an error.
+
+Supported Type Combinations -
+- `Int<W>` >= `Int<W>` -> `Bit`
+- `UInt<W>` >= `UInt<W>` -> `Bit`
+
+Usage -
+```rust
+let val_a: UInt<12> = UInt::<12>::from_u16(400);
+let val_b: UInt<12> = UInt::<12>::from_u16(400);
+let is_greater_equal = val_a >= val_b;
+let out: Bit = Bit::new();
+out.assign(is_greater_equal); // yields true (1)
+
+let p: Int<8> = Int::<8>::from_i32(-12);
+let q: Int<8> = Int::<8>::from_i32(-15);
+let flag: Bit = Bit::new();
+flag.assign(p >= q); // yields true (1) because -12 is greater than or equal to -15
+```
 #### Vector Manipulation -
 ##### Bitwise Shift Left (`<<`) -
+The **Bitwise Shift Left** operation (`<<`) shifts all the bits within the first operand towards the left by the amount dictated by the second operand (which is of type `UInt`). The two vectors need not be of the same width, and the result only depends on the width of the vector being shifted. The shifted space is always padded with zeros.
+
+Supported Type Combinations -
+- `LogicVec<W>` << `UInt<Q>` -> `LogicVec<W>`
+- `BitVec<W>` << `UInt<Q>` -> `BitVec<W>`
+- `Int<W>` << `UInt<Q>` -> `Int<W>`
+- `UInt<W>` << `UInt<Q>` -> `UInt<W>`
+
+Usage -
+```rust
+let target: BitVec<16> = BitVec::<16>::from_usize(0x00FF);
+let amount: UInt<4> = UInt::<4>::from_u8(4);
+let shifted = target << amount;
+let out: BitVec<16> = BitVec::<16>::new(); // width depends strictly on the vector being shifted (16)
+out.assign(shifted); // yields 0x0FFF (shifted left by 4, padded with zeros)
+
+let num: UInt<32> = UInt::<32>::from_u32(5);
+let shift_amt: UInt<8> = UInt::<8>::from_u8(2);
+let result: UInt<32> = UInt::<32>::new(); // widths of target and amount do not need to match
+result.assign(num << shift_amt); // yields 20 (5 multiplied by 2^2)
+
+let bad_target: Int<8> = Int::<8>::from_i32(2);
+let bad_amount: Int<4> = Int::<4>::from_i32(1);
+let err_out: Int<8> = Int::<8>::new();
+err_out.assign(bad_target << bad_amount); // ERROR: shift amount operand must strictly be of type UInt
+```
 ##### Bitwise Shift Right (`>>`) -
+The **Bitwise Shift Right** operation (`>>`) shifts all the bits within the first operand towards the right by the amount dictated by the second operand (which is of type `UInt`). The two vectors need not be of the same width, and the result only depends on the width of the vector being shifted.
+**NOTE: Bitwise Shift Right always zero extends by default. However, if the vector to be shifted is a signed integer (`Int<W>`), it will be sign extended instead.**
+
+Supported Type Combinations -
+- `LogicVec<W>` >> `UInt<Q>` -> `LogicVec<W>`
+- `BitVec<W>` >> `UInt<Q>` -> `BitVec<W>`
+- `Int<W>` >> `UInt<Q>` -> `Int<W>`
+- `UInt<W>` >> `UInt<Q>` -> `UInt<W>`
+
+Usage -
+```rust
+// unsigned Vector Logical Right Shift (zero-extneded)
+let raw_vector: BitVec<8> = BitVec::<8>::from_usize(0b11001100);
+let amt: UInt<4> = UInt::<4>::from_u8(2);
+let logical_shift = raw_vector >> amt;
+let out_logical: BitVec<8> = BitVec::<8>::new();
+out_logical.assign(logical_shift); // yields 0b00110011 (padded with zero bits from the left)
+
+// Signed Integer Arithmetic Right Shift (sign-extended)
+let signed_num: Int<8> = Int::<8>::from_i32(-64); // Binary: 0b11000000
+let amt_signed: UInt<4> = UInt::<4>::from_u8(2);
+let arithmetic_shift = signed_num >> amt_signed;
+let out_arithmetic: Int<8> = Int::<8>::new();
+out_arithmetic.assign(arithmetic_shift); // yields -16 (Binary: 0b11110000, MSB sign bit is copied down)
+```
 ##### Slicing (`[]`) -
 ##### Concatenation (`concat!()`) -
 ### Functions and Methods -
