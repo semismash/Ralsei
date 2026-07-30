@@ -826,8 +826,135 @@ let arithmetic_shift = signed_num >> amt_signed;
 let out_arithmetic: Int<8> = Int::<8>::new();
 out_arithmetic.assign(arithmetic_shift); // yields -16 (Binary: 0b11110000, MSB sign bit is copied down)
 ```
-##### Slicing (`[]`) -
+##### Indexing (`[]`) -
+**Indexing** is an operation which is defined specifically for Vector types (`LogicVec<W>`, `BitVec<W>`, `Int<W>`, `UInt<W>`), allowing to index a specific cell from the vector and use accordingly. All indexing in *Ralsei* is zero-indexing.
+There are three ways to index a vector in *Ralsei* -
+1. Using the `.at::<INDEX>()` method defined for all vector types, to index at compile time.
+2. Using the `.index(idx: UInt<W>)` method for runtime indexing (synthesized into a MUX). **NOTE: .index() ensures that specifically for `BitVec<W>` types and its derivatives the width of the vector 'W' equals 2 to the power of the width of the index literal 'Q' (i.e. W == 2\*\*Q). However, this is not checked for `LogicVec<W>`.** 
+3. Using the `[]` operator to index a specific cell from the vector, either synthesizes to compile-time or runtime. (Determined by the `#[ralsei(module)]` attribute macro at compile-time, and evaluates with the aforementioned rules.)
+The method/operation returns the type of cell that the vector is composed of. If the requested index is/can be out of bounds, then a compiler error is raised and synthesis fails. However, for **LogicVec** indexing, if it is at runtime, it returns `X` instead.
+
+<!-- Developer's note: To get past the hard indexing limit of W from BitVec<W> mismatching with 2 ** Q of UInt<Q>, concatenation/truncating the vector to match the expected width can be used to get past it. -->
+
+Supported Type Combinations -
+- `LogicVec<W>`\[`UInt<Q>`\] -> `Logic`
+- `BitVec<W>`\[`UInt<Q>`\] -> `Bit`
+- `Int<W>`\[`UInt<Q>`\] -> `Bit`
+- `UInt<W>`\[`UInt<Q>`\] -> `Bit`
+
+Usage -
+```rust
+let vec: LogicVec<64> = LogicVec::<64>::new();
+const IDX: usize = 17;
+let cell: Logic = Logic::new();
+cell.assign(vec.at::<IDX>()); // IDX provided, hardwiring bit 17 from vec to cell
+
+let bus: BitVec<4> = BitVec::<4>::new();
+let idx: UInt<2> = UInt::<2>::from_u8(2);
+let cell: Bit = Bit::new();
+cell.assign(bus.index(idx)); // W = 4; Q = 2; W = 2 ** Q; hence evaluates
+
+let vec_2: Int<16> = Int::<16>::new();
+let cell_2: Bit = Bit::new();
+cell.assign(vec_2.at::<23>()); // IDX value 23 is greater than max indexable value of 15, hence causing out-of-bounds compiler error
+
+let vec_3: UInt<18> = UInt::<18>::from_usize(67);
+let index: UInt<4> = UInt::<4>::from_u8(9);
+cell.assign(vec_3[index]); // runtime indexing done here as constant value is not passed directly into index; ERROR: as width of index 'Q' (4) when raised to power of 2 (2**Q = 16) does not match width of vector 'W' (18)
+```
+##### Slicing -
+**Slicing** is an operation which is defined specifically for Vector types (`LogicVec<W>`, `BitVec<W>`, `Int<W>`, `UInt<W>`), allowing to slice a specific range of cells from the vector and use accordingly. Just like in indexing, slices in *Ralsei* is zero-indexed.
+There are three ways to slice a vector in *Ralsei* -
+1. Static part-select - Using the `.slice::<UPPER, LOWER>()` method on a vector type to slice it statically at compile-time. (**NOTE: UPPER and LOWER are both inclusive.**)
+2. Indexed part-select (upwards) - Using the `.slice_up::<COUNT>::(idx: UInt<Q>)` method on a vector type at runtime, to slice up `COUNT` cells from `idx`. (**NOTE: Raises compile time error if (2\*\*Q + COUNT - 2 >= W**)
+3. Indexed part-select (downwards) - Using the `.slice_down::<COUNT>::(idx: UInt<Q>)` method on a vector type at runtime, to slice down `COUNT` cells from `idx`. (**NOTE: Raises compile time error if COUNT <= 1**)
+The methods return a vector of the same type but a different width depending on the number of bits sliced . If the method goes out of bounds at compile-time, an error is raised and synthesis fails. But if the method (after synthesis) goes out of bounds at runtime, the extra sliced cells are filled with a specific value based on the type of vector sliced -
+- If it is a **LogicVec** (or its derivatives), the extra sliced cells are filled with the `X` value.
+- If it is a **BitVec** (or its derivatives), the extra sliced cells are filled with the `0` value by default.
+
+Supported Type Combinations - (**NOTE: The `[:]` and `[±:]` syntax is used here simply for ease of representation, and does not represent actual syntax in the language.**)
+- `LogicVec<W>`\[`UPPER`:`LOWER`\] -> `LogicVec<{UPPER-LOWER+1}>`
+- `LogicVec<W>`\[`UInt<Q>`±:`COUNT`\] -> `LogicVec<COUNT>`
+- `BitVec<W>`\[`UPPER`:`LOWER`\] -> `BitVec<{UPPER-LOWER+1}>`
+- `BitVec<W>`\[`UInt<Q>`±:`COUNT`\] -> `BitVec<COUNT>`
+- `Int<W>`\[`UPPER`:`LOWER`\] -> `Int<{UPPER-LOWER+1}>`
+- `Int<W>`\[`UInt<Q>`±:`COUNT`\] -> `Int<COUNT>`
+-  `UInt<W>`\[`UPPER`:`LOWER`\] -> `UInt<{UPPER-LOWER+1}>`
+- `UInt<W>`\[`UInt<Q>`±:`COUNT`\] -> `UInt<COUNT>`
+
+Example Usage -
+```rust
+let instruction: BitVec<32> = BitVec::<32>::from_usize(0x02A58533);
+let rd: BitVec<5> = BitVec::<5>::new();
+rd.assign(instruction.slice::<11, 7>()); 
+
+let bad_vec: UInt<16> = UInt::<16>::new();
+let out_err: UInt<8> = UInt::<8>::new();
+out_err.assign(bad_vec.slice::<19, 12>()); // ERROR: 19 out of bounds for W=16
+
+let reg_file: BitVec<8> = BitVec::<8>::new();
+let idx_up: UInt<3> = UInt::<3>::from_u8(2);
+let window_up: BitVec<2> = BitVec::<2>::new();
+window_up.assign(reg_file.slice_up::<2>(idx_up)); 
+
+let wide_bus: LogicVec<10> = LogicVec::<10>::new();
+let idx_overflow: UInt<4> = UInt::<4>::from_u8(9);
+let window_logic: LogicVec<4> = LogicVec::<4>::new();
+window_logic.assign(wide_bus.slice_up::<4>(idx_overflow)); // runtime overflow fills extra bits with X
+
+let error_bus: BitVec<16> = BitVec::<16>::new();
+let idx_bad: UInt<4> = UInt::<4>::from_u8(5);
+let window_bad: BitVec<4> = BitVec::<4>::new();
+window_bad.assign(error_bus.slice_up::<4>(idx_bad)); // ERROR: 2^4 + 4 - 2 = 18 >= W (16)
+
+let data_bus: Int<32> = Int::<32>::new();
+let idx_down: UInt<4> = UInt::<4>::from_u8(2);
+let window_down: Int<3> = Int::<3>::new();
+window_down.assign(data_bus.slice_down::<3>(idx_down)); 
+
+let small_bus: UInt<16> = UInt::<16>::new();
+let idx_ok: UInt<3> = UInt::<3>::from_u8(4);
+let window_fail: UInt<1> = UInt::<1>::new();
+window_fail.assign(small_bus.slice_down::<1>(idx_ok)); // ERROR: COUNT <= 1
+```
 ##### Concatenation (`concat!()`) -
+**Concatenation** is an operation which takes in multiple different wires/buses and groups them into a single contiguous vector. The order in which these elements are joined together depends on the order of which they are passed into the macro (passed MSB first). The elements passed must be of the same type or same class of types, and the returned vector is of the corresponding type and sum of all the widths as described below.
+
+Supported Type Combinations - (**NOTE: In the given combinations, `Bit` and `Logic` are optional in most of them, and are just included to help deduce the type in the documentation. `Logic` or `LogicVec<W>` can be included in any parameter list, but doing so would implicitly cast it to `LogicVec<N>` regardless of the other types.**)
+- `concat!(Logic, Logic, Logic, ...N)` -> `LogicVec<N>`
+- `concat!(Logic, Bit, ...N)` -> `LogicVec<N>`
+- `concat!(Bit, Bit, Bit, ...N` -> `BitVec<N>`
+- `concat!(Logic, LogicVec<A>, LogicVec<B>, ...)` -> `LogicVec<{1 + A + B + ...}>`
+- `concat!(Bit, BitVec<A>, BitVec<B>, ...)` -> `BitVec<{1 + A + B + ...}>`
+- `concat!(Bit, Int<A>, Int<B>, ...)` -> `Int<{1 + A + B + ...}>`
+- `concat!(Bit, UInt<A>, UInt<B>, ...)` -> `UInt<{1 + A + B + ...}>`
+- ...other combinations possible but not mentioned...
+
+Example Usage -
+```rust
+use ralsei::concat;
+
+let sign_bit: Bit = Bit::init(1);
+let imm_10_1: BitVec<10> = BitVec::<10>::new();
+let imm_11: Bit = Bit::init(0);
+let imm_19_12: BitVec<8> = BitVec::<8>::new();
+let immediate: BitVec<20> = BitVec::<20>::new();
+immediate.assign(concat!(sign_bit, imm_10_1, imm_11, imm_19_12)); 
+
+let internal_flag: Bit = Bit::init(1);
+let register_bus: BitVec<8> = BitVec::<8>::new();
+let external_pin: Logic = Logic::new(); // 4-state wire
+let boundary_bus: LogicVec<10> = LogicVec::<10>::new();
+boundary_bus.assign(concat!(external_pin, internal_flag, register_bus)); 
+
+let val_signed: Int<8> = Int::<8>::new();
+let val_unsigned: UInt<8> = UInt::<8>::new();
+let out_err: UInt<16> = UInt::<16>::new();
+out_err.assign(concat!(val_signed, val_unsigned)); 
+// ERROR: Int and UInt belong to different class structures and hence cannot mix directly
+```
 ### Functions and Methods -
 
 ### Macros -
+### Attributes -
+
