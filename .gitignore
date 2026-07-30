@@ -21,4 +21,4 @@ target
 #.idea/
 
 # project
-/docs/
+.obsidian/
