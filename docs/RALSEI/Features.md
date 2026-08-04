@@ -179,7 +179,7 @@ enum ColorState {
 }
 ```
 Just like regular Rust enums, *Ralsei*-recognized enums also conform to much of Rust's existing mechanisms such as exhaustive matching and even tuple/struct enum variants (assuming that they match with the `#[ralsei(repr(Type))]` attribute, if set for the enum.
-**NOTE: *Ralsei* also mandates that all match blocks that are a part of synthesizable code must use a catch-all (`_`) case to prevent unwanted latches from forming.** *(TBD: Specific attribute to prevent Ralsei from mandating a catch-all statement in a synthesizable match block, although Rust's compiler will still check if all enum variants are matched or not. The tentative name for this attribute is `#[ralsei([)allow_no_default_case)]`)*
+**NOTE: *Ralsei* also mandates that all match blocks that are a part of synthesizable code must use a catch-all (`_`) case to prevent unwanted latches from forming.** *(TBD: Specific attribute to prevent Ralsei from mandating a catch-all statement in a synthesizable match block, although Rust's compiler will still check if all enum variants are matched or not. The tentative name for this attribute is `#[ralsei(allow_no_default_case)]`)*
 Example usage -
 ```rust
 #[ralsei(enum)]
@@ -932,7 +932,7 @@ Supported Type Combinations - (**NOTE: In the given combinations, `Bit` and `Log
 
 Example Usage -
 ```rust
-use ralsei::concat;
+use ralsei::path::to::concat; // path to be added
 
 let sign_bit: Bit = Bit::init(1);
 let imm_10_1: BitVec<10> = BitVec::<10>::new();
@@ -954,7 +954,24 @@ out_err.assign(concat!(val_signed, val_unsigned));
 // ERROR: Int and UInt belong to different class structures and hence cannot mix directly
 ```
 ### Functions and Methods -
-
 ### Macros -
+*Ralsei* provides a large number of in-built macros which can be used for a variety of purposes to help with synthesis, operations, and reducing boilerplate. Following are the macros that are defined in *Ralsei*.
+##### `generate!()` -
+The `generate!()` macro is a powerful macro provided by *Ralsei* which smartly generates synthesizable code at compile time (such as via loops, conditions, and match cases), helping avoid repetitive boilerplate and optimizing code greatly.
+##### `concat!()`
 ### Attributes -
-
+As *Ralsei* is tightly integrated with Rust while still having syntax, features, and requiring verification similar to that of *SystemVerilog*, it uses a combination of multiple different custom Rust attributes to verify the structure of the program and it's *Ralsei*-specific syntax and semantics.
+All *Ralsei* attributes are in the format `#[ralsei(...)]` (where `...` is replaced with the actual name of the attribute).
+Here are the list of the attributes that *Ralsei* introduces, and their function and usage -
+- `#[ralsei(module)]`
+- `#[ralsei(testbench)]`
+- `#[ralsei(function)]`
+- `#[ralsei(packed)]`
+- `#[ralsei(inline)]`
+- `#[ralsei(enum)]`
+- `#[ralsei(repr(Type))]`
+- `#[ralsei(allow_no_default_case)]`
+- `#[ralsei(on_edge(...))]`
+- `#[ralsei(rename = 'custom_name')]`
+- `#[ralsei(protected)]`
+- `#[ralsei(tb_init)]`
