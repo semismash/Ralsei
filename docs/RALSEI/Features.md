@@ -958,7 +958,106 @@ out_err.assign(concat!(val_signed, val_unsigned));
 *Ralsei* provides a large number of in-built macros which can be used for a variety of purposes to help with synthesis, operations, and reducing boilerplate. Following are the macros that are defined in *Ralsei*.
 ##### `generate!()` -
 The `generate!()` macro is a powerful macro provided by *Ralsei* which smartly generates synthesizable code at compile time (such as via loops, conditions, and match cases), helping avoid repetitive boilerplate and optimizing code greatly.
-##### `concat!()`
+The macro can be used in combination with existing Rust control structures such as `if-else` statements, `for` loops (with compile-time known conditions), and `match` statements, which will allow the macro to automatically generate synthesizable (or non-synthesizable) structures.
+Control structures in the macro which are used to generate new synthesizable blocks can be given a specific name or a **label** via the  `#[ralsei(gen_lbl = 'label_name')]` attribute. This makes it so that during synthesis, the names given to these generated modules and blocks match that of the naming. Doing so is optional, as not giving a label will allow *Ralsei* to auto-generate names, based on the same format as that of *SystemVerilog*.
+The following are the use-cases of the `generate!()` macro in *Ralsei* -
+1) Generate-conditional (via `if-else` branches) - Rust's `if-else` conditional statements can be used to conditionally generate certain synthesizable blocks and structures. While using `if-else` blocks in a `generate!()` macro body, the condition must be fully evaluable at compile time.
+   In addition, Rust's `if let` syntax may also be used to leverage Rust's pattern matching feature.
+   Example use-case -
+```rust
+const PIPELINED: bool = false;
+
+// inside module definition 
+generate!(
+	#[ralsei(gen_lbl = 'sequential')]
+	if PIPELINED {
+		#[on_edge(posedge(self.clk))]
+		{
+			data_out = data_in_a + data_in_b;
+		}
+	} 
+	#[ralsei(gen_lbl = 'combinational')]
+	else {
+		data_out = data_in_a + data_in_b;
+	}
+);
+
+enum InstType {
+	Reg(usize),
+	Imm(usize),
+	Nop
+}
+
+// if let usecase 
+const inst_type: InstType = Reg(5);
+generate!(
+	if let Reg(reg_no) = inst_type {
+		// do something
+	} else {
+		// do something else
+	}
+);
+```
+2) Generate-replication (via `for` loops) - A Rust `for` loop can be used within the `generate!()` macro to repeatedly generate a synthesizable structure, module, or connection multiple times repeatedly. However, doing so requires the bounds of the loop to be known and evaluable at compile time. 
+   Example use-case -
+```rust
+const DFF_COUNT: usize = 32;
+
+// inside module definition
+generate!(
+	#[ralsei(gen_lbl = 'gen_shift_reg')]
+	for i in 0..DFF_COUNT {
+		if i==0 {
+			let inst_0 = DFF {
+				clk: self.clk.connect_in(),
+				d:   self.data_in.connect_in(),
+				q:   pipe[0].connect_out(),
+			};
+		} else {
+			let inst_n = DFF {
+				clk: self.clk.connect_in(),
+				d:   pipe[i - 1].connect_in(),
+				q:   pipe[i].connect_out(),
+			};
+		}
+	}
+);
+```
+3) Generate-case (via `match` statement) - Rust's `match` statements can be used to safely generate safe branches that correspond to distinct hardware layout configurations, based on discrete values which are evaluable at compile time. 
+   Example use-case -
+```rust
+enum AluType {
+	Bypass,
+	Simple,
+	Complex
+}
+
+const ALU_TYPE: AluType = Bypass;
+
+// inside module definition
+generate!(
+	match ALU_TYPE {
+		#[ralsei(gen_lbl = 'basic_alu')]
+		Simple => {
+			alu_out.assign(in_a + in_b);
+		},
+		#[ralsei(gen_lbl = 'advanced_alu')]
+		Complex => {
+			let dsp_inst = ComplexDspCore {
+				a: in_a.connect_in(),
+				b: in_b.connect_in(),
+				y: self.alu_out.connect_out(),
+			}
+		},
+		#[ralsei(gen_lbl = 'bypass_alu')]
+		_ => {
+			alu_out.assign = in_a;
+		}
+	}
+);
+```
+##### `concat!()` - 
+The `concat!()` macro is a operational macro provided by *Ralsei* which concatenates bits and buses of multiple different widths into a single bus of the combined width of all buses. For more information about the concatenate macro, please refer [[##### Concatenation (`concat!()`) -|here]].
 ### Attributes -
 As *Ralsei* is tightly integrated with Rust while still having syntax, features, and requiring verification similar to that of *SystemVerilog*, it uses a combination of multiple different custom Rust attributes to verify the structure of the program and it's *Ralsei*-specific syntax and semantics.
 All *Ralsei* attributes are in the format `#[ralsei(...)]` (where `...` is replaced with the actual name of the attribute).
@@ -975,3 +1074,4 @@ Here are the list of the attributes that *Ralsei* introduces, and their function
 - `#[ralsei(rename = 'custom_name')]`
 - `#[ralsei(protected)]`
 - `#[ralsei(tb_init)]`
+- `#[ralsei(gen_lbl = 'label_name')]`
