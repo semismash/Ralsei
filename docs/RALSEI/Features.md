@@ -971,7 +971,7 @@ const PIPELINED: bool = false;
 generate!(
 	#[ralsei(gen_lbl = 'sequential')]
 	if PIPELINED {
-		#[on_edge(posedge(self.clk))]
+		#[ralsei(on_edge(posedge self.clk))]
 		{
 			data_out = data_in_a + data_in_b;
 		}
@@ -1006,15 +1006,17 @@ const DFF_COUNT: usize = 32;
 // inside module definition
 generate!(
 	#[ralsei(gen_lbl = 'gen_shift_reg')]
+	let inst_0: DFF;
+	let inst_n: DFF;
 	for i in 0..DFF_COUNT {
 		if i==0 {
-			let inst_0 = DFF {
+			inst_0 = DFF {
 				clk: self.clk.connect_in(),
 				d:   self.data_in.connect_in(),
 				q:   pipe[0].connect_out(),
 			};
 		} else {
-			let inst_n = DFF {
+			inst_n = DFF {
 				clk: self.clk.connect_in(),
 				d:   pipe[i - 1].connect_in(),
 				q:   pipe[i].connect_out(),
@@ -1051,7 +1053,7 @@ generate!(
 		},
 		#[ralsei(gen_lbl = 'bypass_alu')]
 		_ => {
-			alu_out.assign = in_a;
+			alu_out.assign(in_a);
 		}
 	}
 );
