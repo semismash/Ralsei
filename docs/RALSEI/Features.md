@@ -1038,6 +1038,7 @@ const ALU_TYPE: AluType = Bypass;
 
 // inside module definition
 generate!(
+	let dsp_inst: ComplexDspCore;
 	match ALU_TYPE {
 		#[ralsei(gen_lbl = 'basic_alu')]
 		Simple => {
@@ -1045,7 +1046,7 @@ generate!(
 		},
 		#[ralsei(gen_lbl = 'advanced_alu')]
 		Complex => {
-			let dsp_inst = ComplexDspCore {
+			dsp_inst = ComplexDspCore {
 				a: in_a.connect_in(),
 				b: in_b.connect_in(),
 				y: self.alu_out.connect_out(),
@@ -1063,17 +1064,17 @@ The `concat!()` macro is a operational macro provided by *Ralsei* which concaten
 ### Attributes -
 As *Ralsei* is tightly integrated with Rust while still having syntax, features, and requiring verification similar to that of *SystemVerilog*, it uses a combination of multiple different custom Rust attributes to verify the structure of the program and it's *Ralsei*-specific syntax and semantics.
 All *Ralsei* attributes are in the format `#[ralsei(...)]` (where `...` is replaced with the actual name of the attribute).
-Here are the list of the attributes that *Ralsei* introduces, and their function and usage -
-- `#[ralsei(module)]`
-- `#[ralsei(testbench)]`
-- `#[ralsei(function)]`
-- `#[ralsei(packed)]`
-- `#[ralsei(inline)]`
-- `#[ralsei(enum)]`
-- `#[ralsei(repr(Type))]`
-- `#[ralsei(allow_no_default_case)]`
-- `#[ralsei(on_edge(...))]`
-- `#[ralsei(rename = 'custom_name')]`
-- `#[ralsei(protected)]`
-- `#[ralsei(tb_init)]`
-- `#[ralsei(gen_lbl = 'label_name')]`
+Here are the list of the attributes that *Ralsei* introduces, along with their function -
+- `#[ralsei(module)]` - To be used on a Rust struct to turn it into a *Ralsei* module. Doing so requires also implementing the `Module` trait, and hence the `def_module(&self)` function.
+- `#[ralsei(testbench)]` - To be used on a Rust struct to specifically mark a *Ralsei* testbench. As of now, there may be only one testbench in the entire program.
+- `#[ralsei(function)]` - To be used on a Rust function to make it a synthesizable *Ralsei* function. Doing so requires the function to be purely combinational, and NOT contain any `#[ralsei(on_edge(...))]` marked scopes.
+- `#[ralsei(packed)]` - To be used on a struct to mark it so that *Ralsei* considers it to be a single bus of the same type, rather than a being treated as separate fields in the same struct.
+- `#[ralsei(inline)]` - To be used with a *Ralsei* module or function to tell the compiler and graph optimizer to directly inline it rather than instantiating a separate module or structure each time.
+- `#[ralsei(enum)]` - To be used on a Rust enum to make it fully compatible with *Ralsei*'s types.
+- `#[ralsei(repr(Type))]` - To be used on an enum marked with  `#[ralsei(enum)]` to allow it to be interpreted as a synthesizable *Ralsei* type, and be used accordingly in simulation and synthesis.
+- `#[ralsei(allow_no_default_case)]` - Can be used on a match statement to prevent the compiler from raising an error if a default cause is not given when specifically matching values for a *Ralsei* specific type. **NOTE: Use with caution, as using it and leaving out a default case may cause unintended latches to be formed.**
+- `#[ralsei(on_edge(...))]` - To be used for a scope to make sure the entire scope is run and evaluated only on specified signal edge. Multiple signals may be listed in the sensitivity list, and all assignments are treated as non-blocking within the scope.
+- `#[ralsei(rename = 'custom_name')]` - To be used to tell the backend automatic name generator to set a specific name for the module, pin, or block, ensuring global interoperability.
+- `#[ralsei(protected)]` - Directive for the optimizer to prevent aggressively deleting certain wires or registers which may seem redundant or unused, hence preserving the structure as it is.
+- `#[ralsei(tb_init)]` - To be used within a *Ralsei* testbench to initialize certain values and fields before the simulation starts (i.e. at t < 0).
+- `#[ralsei(gen_lbl = 'label_name')]` - To be used under a specific control structure within the `generate!()` macro to give the block a specific label name, allowing clarity within the netlist.
