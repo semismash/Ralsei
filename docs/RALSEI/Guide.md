@@ -29,55 +29,59 @@ pub struct SyncFIFO
 ```
 ##### Defining a Module -
 ```rust
-impl<DATA_WIDTH, FIFO_DEPTH> Module for SyncFIFO<DATA_WIDTH, FIFO_DEPTH> {
+impl<const DATA_WIDTH: usize, const FIFO_DEPTH: usize> Module for SyncFIFO<DATA_WIDTH, FIFO_DEPTH> {
 	// local param as const variable
-	const PTR_WIDTH: usize = DATA_WIDTH.ilog2();
+	const PTR_WIDTH: usize = FIFO_DEPTH.ilog2();
 	
 	// module definition and function here
 	fn def_module(&self) {
 		
 		// mem array and pointers
 		let fifo_mem: [BitVec<DATA_WIDTH>; FIFO_DEPTH];
-		let wr_ptr: BitVec<PTR_WIDTH + 1>;
-		let rd_ptr: BitVec<PTR_WIDTH + 1>;
+		let wr_ptr: BitVec<{ Self::PTR_WIDTH + 1 }> = BitVec::new();
+		let rd_ptr: BitVec<{ Self::PTR_WIDTH + 1 }> = BitVec::new();
 		
 		// status flags
 		self.empty.assign(wr_ptr == rd_ptr);
 		self.full.assign(
-			(wr_ptr[PTR_WIDTH] != rd_ptr[PTR_WIDTH]) &&
-			(wr_ptr.slice<PTR_WIDTH - 1, 0>() == rd_ptr.slice<PTR_WIDTH - 1, 0>())
-		);
+		(wr_ptr.at::<{ Self::PTR_WIDTH }>() != rd_ptr.at::<{ Self::PTR_WIDTH }>()) && 
+		(wr_ptr.slice::<{ Self::PTR_WIDTH - 1 }, 0>() == rd_ptr.slice::<{ Self::PTR_WIDTH - 1 }, 0>()));
+		
+		// addresses
+		let wr_addr = UInt::<{ Self::PTR_WIDTH }>::from_bits(wr_ptr.slice::<{ Self::PTR_WIDTH - 1 }, 0>());
+		let rd_addr = UInt::<{ Self::PTR_WIDTH }>::from_bits(rd_ptr.slice::<{ Self::PTR_WIDTH - 1 }, 0>());
 		
 		// write logic
-		#[ralsei(on_edge(posedge self.clk, negedge rst_n))]
+		#[ralsei(on_edge(posedge self.clk, negedge self.rst_n))]
 		{
-			if !rst_n {
+			if self.rst_n.active() {
 				wr_ptr = BitVec::from_usize(0);
-			} else if rd_en && !empty {
+			} else if self.wr_en && !self.full {
 				wr_ptr = wr_ptr + Bit::init(High);
-				fifo_mem[wr_ptr.slice<PTR_WIDTH - 1: 0>()] = data_in;
+				fifo_mem[wr_addr] = self.data_in;
 			}
 		}
 		
 		// read logic
-		#[ralsei(on_edge(posedge self.clk, negedge rst_n))]
+		#[ralsei(on_edge(posedge self.clk, negedge self.rst_n))]
 		{
-			if !rst_n {
+			if self.rst_n.active() {
 				rd_ptr = BitVec::from_usize(0);
-				data_out = BitVec::from_usize(0);
-			} else if rd_en && !empty {
+				self.data_out = BitVec::from_usize(0);
+			} else if self.rd_en && !self.empty {
 				rd_ptr = rd_ptr + Bit::init(High);
-				data_out = fifo_mem[rd_ptr.slice<PTR_WIDTH - 1: 0>()];s
+				self.data_out = fifo_mem[rd_addr];
 			}
 		}
 	}
 }
+
 ```
 ##### Instantiating a Module -
 ```rust
 // in body of testbench or another module -
-let DUT: SyncFIFO =
-SyncFIFO {
+let DUT: SyncFIFO;
+DUT = SyncFIFO {
 	// clk and rst_n
 	clk:      self.tb_clk.connect_in();
 	rst_n:    self.tb_rst_n.connect_in();
@@ -88,7 +92,7 @@ SyncFIFO {
 	// outsputs
 	data_out: self.tb_data_out.connect_out();
 	full:     self.tb_full.connect_out();
-	empty:    self.tb_full.connect_out();
+	empty:    self.tb_empty.connect_out();
 }
 ```
 
