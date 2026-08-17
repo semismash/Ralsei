@@ -44,8 +44,9 @@ impl<const DATA_WIDTH: usize, const FIFO_DEPTH: usize> Module for SyncFIFO<DATA_
 		// status flags
 		self.empty.assign(wr_ptr == rd_ptr);
 		self.full.assign(
-		(wr_ptr.at::<{ Self::PTR_WIDTH }>() != rd_ptr.at::<{ Self::PTR_WIDTH }>()) && 
-		(wr_ptr.slice::<{ Self::PTR_WIDTH - 1 }, 0>() == rd_ptr.slice::<{ Self::PTR_WIDTH - 1 }, 0>()));
+			(wr_ptr.at::<{ Self::PTR_WIDTH }>() != rd_ptr.at::<{ Self::PTR_WIDTH }>()) && 
+			(wr_ptr.slice::<{ Self::PTR_WIDTH - 1 }, 0>() == rd_ptr.slice::<{ Self::PTR_WIDTH - 1 }, 0>())
+		);
 		
 		// addresses
 		let wr_addr = UInt::<{ Self::PTR_WIDTH }>::from_bits(wr_ptr.slice::<{ Self::PTR_WIDTH - 1 }, 0>());
