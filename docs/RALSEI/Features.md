@@ -1076,5 +1076,4 @@ Here are the list of the attributes that *Ralsei* introduces, along with their f
 - `#[ralsei(on_edge(...))]` - To be used for a scope to make sure the entire scope is run and evaluated only on specified signal edge. Multiple signals may be listed in the sensitivity list, and all assignments are treated as non-blocking within the scope.
 - `#[ralsei(rename = 'custom_name')]` - To be used to tell the backend automatic name generator to set a specific name for the module, pin, or block, ensuring global interoperability.
 - `#[ralsei(protected)]` - Directive for the optimizer to prevent aggressively deleting certain wires or registers which may seem redundant or unused, hence preserving the structure as it is.
-- `#[ralsei(tb_init)]` - To be used within a *Ralsei* testbench to initialize certain values and fields before the simulation starts (i.e. at t < 0).
 - `#[ralsei(gen_lbl = 'label_name')]` - To be used under a specific control structure within the `generate!()` macro to give the block a specific label name, allowing clarity within the netlist.
