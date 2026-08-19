@@ -29,9 +29,12 @@ pub struct SyncFIFO
 ```
 ##### Defining a Module -
 ```rust
-impl<const DATA_WIDTH: usize, const FIFO_DEPTH: usize> Module for SyncFIFO<DATA_WIDTH, FIFO_DEPTH> {
+impl<const DATA_WIDTH: usize, const FIFO_DEPTH: usize> SyncFIFO<DATA_WIDTH, FIFO_DEPTH> {
 	// local param as const variable
 	const PTR_WIDTH: usize = FIFO_DEPTH.ilog2();
+}
+
+impl<const DATA_WIDTH: usize, const FIFO_DEPTH: usize> Module for SyncFIFO<DATA_WIDTH, FIFO_DEPTH> {
 	
 	// module definition and function here
 	fn def_module(&self) {
@@ -74,7 +77,9 @@ impl<const DATA_WIDTH: usize, const FIFO_DEPTH: usize> Module for SyncFIFO<DATA_
 				self.data_out = fifo_mem[rd_addr];
 			}
 		}
+		
 	}
+	
 }
 
 ```
@@ -104,3 +109,103 @@ In *Ralsei*, a testbench is a specific kind of module which contains non-synthes
 3) The struct may have any fields, or lack fields too. Testbenches should not contain input and output ports as found in modules.
 4) Marking the struct as a testbench using the `#ralsei(testbench)]` attribute necessitates implementing the `TestBench` trait for the module, which requires implementing the `test(&mut self)` function, and optionally the `setup(&mut self)` function. The `test(&mut self)` function contains the actual logic that will be run for simulation during a test, while the `setup(&mut self)` function sets up and initializes all fields before the simulation starts (i.e. initial values of the simulation at t <= 0), functioning similarly to an `initial` block in *Verilog*/*SystemVerilog*.
 5) Testbenches cannot be used as regular modules, and are not synthesizable into physical circuits. They exist purely for the purpose of simulation.
+#### Example Usage
+##### Declaring and Defining a Testbench -
+```rust
+use rand::Rng; //use random crate from Rust for this particular testbench
+
+#[ralsei(testbench)]
+struct SyncFIFO_TB<const WIDTH: usize = 8, const DEPTH: usize = 4> {
+	pub dut: SyncFIFO;
+	//other fields
+	pub tb_clk:      Clock,
+	pub tb_rst_n:    Reset,
+	pub tb_wr_en:    Bit,
+	pub tb_rd_en:    Bit,
+	pub tb_data_in:  BitVec<WIDTH>,
+	pub tb_data_out: BitVec<WIDTH>,
+	pub tb_full:     Bit,
+	pub tb_empty:    Bit,
+}
+
+impl<const WIDTH: usize, const DEPTH: usize> TestBench for SyncFIFO_TB<WIDTH, DEPTH> {
+
+	//initialize time unit for testbench (mandatory, although given format is tentative)
+	fn def_time_unit(&self) {
+		// TBA laters
+	}
+	
+	//initialization function (optional)
+	fn setup(&mut self) {
+		self.dut = SyncFIFO {
+			clk:      self.tb_clk.connect_in();
+			rst_n:    self.tb_rst_n.connect_in();
+			wr_en:    self.tb_wr_en.connect_in();
+			rd_en:    self.tb_rd_en.connect_in();
+			data_in:  self.tb_data_in.connect_in();
+			data_out: self.tb_data_out.connect_out();
+			full:     self.tb_full.connect_out();
+			empty:    self.tb_empty.connect_out();
+		}
+			
+		self.tb_clk     = Clock::new();
+		self.tb_rst_n   = Reset::init(High);
+		self.tn_wr_en   = Bit::init(Low);
+		self.tn_rd_en   = Bit::init(Low);
+		self.tn_data_in = BitVec::<WIDTH>::from_usize(0);
+		
+		self.tb_rst_n.reset(); // automatically resets by setting to active low and then high in 1 time unit as decided by timescale
+	}
+	
+	// runs in a loop in the background, as long as the simulation runs, starting at t = 0
+	fn loop(&mut self) {
+		self.clk = !self.clk;
+		self.delay(5); // delay 5 time units
+	}
+	
+	// active simulation (mandatory function); starts at t = 0; runs SEQUENTIALLY from top to bottom, like regular Rust code
+	fn test(&mut self) {
+		let mut rng = rand::rng();
+	
+		// do {DEPTH} writes
+		println!("[TB] --- Starting Writes ---");
+		for _ in 0..DEPTH {
+			#[ralsei(on_edge(posedge self.clk))]
+			if !self.tb_full {
+				self.tb_wr_en = 1;
+				let rand_no: u32 = rng.random_range(10..100);
+				self.tb_data_in = BitVec::<WIDTH>::from_u32(rand_no);
+				println!("[TB] Write Data: {}", self.tb_data_in.to_int()); // haven't decided yet how BitVec implements formatting trait
+			}
+		}
+		
+		// turn of writes
+		#[ralsei(on_edge(posedge self.clk))]
+		{
+			self.tb_wr_en = 0;
+			println!("[TB] FIFO Full Status: {}", self.tb_full);
+		}
+		
+		// read the data packets
+		println!("[TB] --- Starting Reads ---");
+		for _ in 0..DEPTH {
+			#[ralsei(on_edge(posedge self.clk))]
+			if !self.tb_empty {
+				self.tb_rd_en = 1;
+				self.delay(1);
+				println!("[TB] Read Data: {}", self.tb_data_out.to_int());
+			}
+		}
+		
+		#[ralsei(on_edge(posedge self.clk))]
+		{
+			self.tb_rd_en = 0;
+			println!("[TB] FIFO Empty Status: {}"}, self.tb_empty);
+		}
+		
+		self.delay(20);
+		println!("[TB] Simulation Complete.");
+	}	
+	
+}
+```
