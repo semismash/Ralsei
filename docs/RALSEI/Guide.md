@@ -112,11 +112,12 @@ In *Ralsei*, a testbench is a specific kind of module which contains non-synthes
 #### Example Usage
 ##### Declaring and Defining a Testbench -
 ```rust
+use core::time::Duration;
 use rand::Rng; //use random crate from Rust for this particular testbench
 
 #[ralsei(testbench)]
 struct SyncFIFO_TB<const WIDTH: usize = 8, const DEPTH: usize = 4> {
-	pub dut: SyncFIFO;
+	pub dut: SyncFIFO<WIDTH, DEPTH>;
 	//other fields
 	pub tb_clk:      Clock,
 	pub tb_rst_n:    Reset,
@@ -130,37 +131,42 @@ struct SyncFIFO_TB<const WIDTH: usize = 8, const DEPTH: usize = 4> {
 
 impl<const WIDTH: usize, const DEPTH: usize> TestBench for SyncFIFO_TB<WIDTH, DEPTH> {
 
-	//initialize time unit for testbench (mandatory, although given format is tentative)
-	fn def_time_unit(&self) {
-		// TBA laters
+	//initialize time unit for testbench (mandatory)
+	fn def_time_unit(&self) -> TimeScale {
+		TimeScale::define(
+			Duration::from_nanos(1),
+			Duration::from_picos(0)
+		);
 	}
 	
 	//initialization function (optional)
 	fn setup(&mut self) {
 		self.dut = SyncFIFO {
-			clk:      self.tb_clk.connect_in();
-			rst_n:    self.tb_rst_n.connect_in();
-			wr_en:    self.tb_wr_en.connect_in();
-			rd_en:    self.tb_rd_en.connect_in();
-			data_in:  self.tb_data_in.connect_in();
-			data_out: self.tb_data_out.connect_out();
-			full:     self.tb_full.connect_out();
-			empty:    self.tb_empty.connect_out();
+			clk:      self.tb_clk.connect_in(),
+			rst_n:    self.tb_rst_n.connect_in(),
+			wr_en:    self.tb_wr_en.connect_in(),
+			rd_en:    self.tb_rd_en.connect_in(),
+			data_in:  self.tb_data_in.connect_in(),
+			data_out: self.tb_data_out.connect_out(),
+			full:     self.tb_full.connect_out(),
+			empty:    self.tb_empty.connect_out(),
 		}
 			
 		self.tb_clk     = Clock::new();
 		self.tb_rst_n   = Reset::init(High);
-		self.tn_wr_en   = Bit::init(Low);
-		self.tn_rd_en   = Bit::init(Low);
-		self.tn_data_in = BitVec::<WIDTH>::from_usize(0);
+		self.tb_wr_en   = Bit::init(Low);
+		self.tb_rd_en   = Bit::init(Low);
+		self.tb_data_in = BitVec::<WIDTH>::from_usize(0);
 		
-		self.tb_rst_n.reset(); // automatically resets by setting to active low and then high in 1 time unit as decided by timescale
+		// reset
+		self.tb_rst_n.activate();
+		self.delay(1);
+		self.tb_rst_n.deactive();
 	}
 	
 	// runs in a loop in the background, as long as the simulation runs, starting at t = 0
 	fn loop(&mut self) {
-		self.clk = !self.clk;
-		self.delay(5); // delay 5 time units
+		self.oscillate(self.tb_clk, 10); // oscillate clock with a period of 10
 	}
 	
 	// active simulation (mandatory function); starts at t = 0; runs SEQUENTIALLY from top to bottom, like regular Rust code
@@ -170,17 +176,17 @@ impl<const WIDTH: usize, const DEPTH: usize> TestBench for SyncFIFO_TB<WIDTH, DE
 		// do {DEPTH} writes
 		println!("[TB] --- Starting Writes ---");
 		for _ in 0..DEPTH {
-			#[ralsei(on_edge(posedge self.clk))]
-			if !self.tb_full {
+			self.wait_posedge(self.tb_clk); // wait until posedge clk before executing
+			if !self.tb_full.as_bool() {
 				self.tb_wr_en = 1;
 				let rand_no: u32 = rng.random_range(10..100);
 				self.tb_data_in = BitVec::<WIDTH>::from_u32(rand_no);
-				println!("[TB] Write Data: {}", self.tb_data_in.to_int()); // haven't decided yet how BitVec implements formatting trait
+				println!("[TB] Write Data: {}", self.tb_data_in.as_usize());
 			}
 		}
 		
 		// turn of writes
-		#[ralsei(on_edge(posedge self.clk))]
+		self.wait_posedge(self.tb_clk);
 		{
 			self.tb_wr_en = 0;
 			println!("[TB] FIFO Full Status: {}", self.tb_full);
@@ -189,15 +195,15 @@ impl<const WIDTH: usize, const DEPTH: usize> TestBench for SyncFIFO_TB<WIDTH, DE
 		// read the data packets
 		println!("[TB] --- Starting Reads ---");
 		for _ in 0..DEPTH {
-			#[ralsei(on_edge(posedge self.clk))]
-			if !self.tb_empty {
+			self.wait_posedge(self.tb_clk);
+			if !self.tb_empty.as_bool() {
 				self.tb_rd_en = 1;
 				self.delay(1);
-				println!("[TB] Read Data: {}", self.tb_data_out.to_int());
+				println!("[TB] Read Data: {}", self.tb_data_out.as_usize());
 			}
 		}
 		
-		#[ralsei(on_edge(posedge self.clk))]
+		self.wait_posedge(self.tb_clk);
 		{
 			self.tb_rd_en = 0;
 			println!("[TB] FIFO Empty Status: {}"}, self.tb_empty);
@@ -205,6 +211,7 @@ impl<const WIDTH: usize, const DEPTH: usize> TestBench for SyncFIFO_TB<WIDTH, DE
 		
 		self.delay(20);
 		println!("[TB] Simulation Complete.");
+		
 	}	
 	
 }
