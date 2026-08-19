@@ -58,7 +58,7 @@ impl<const DATA_WIDTH: usize, const FIFO_DEPTH: usize> Module for SyncFIFO<DATA_
 		// write logic
 		#[ralsei(on_edge(posedge self.clk, negedge self.rst_n))]
 		{
-			if self.rst_n.active() {
+			if self.rst_n.is_active() {
 				wr_ptr = BitVec::from_usize(0);
 			} else if self.wr_en && !self.full {
 				wr_ptr = wr_ptr + Bit::init(High);
@@ -69,7 +69,7 @@ impl<const DATA_WIDTH: usize, const FIFO_DEPTH: usize> Module for SyncFIFO<DATA_
 		// read logic
 		#[ralsei(on_edge(posedge self.clk, negedge self.rst_n))]
 		{
-			if self.rst_n.active() {
+			if self.rst_n.is_active() {
 				rd_ptr = BitVec::from_usize(0);
 				self.data_out = BitVec::from_usize(0);
 			} else if self.rd_en && !self.empty {
@@ -161,7 +161,7 @@ impl<const WIDTH: usize, const DEPTH: usize> TestBench for SyncFIFO_TB<WIDTH, DE
 		// reset
 		self.tb_rst_n.activate();
 		self.delay(1);
-		self.tb_rst_n.deactive();
+		self.tb_rst_n.deactivate();
 	}
 	
 	// runs in a loop in the background, as long as the simulation runs, starting at t = 0
